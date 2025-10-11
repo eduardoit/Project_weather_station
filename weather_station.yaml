@@ -1,0 +1,260 @@
+# ESP32 Weather Station - ESPHome Configuration
+# Last Update: April 2024
+# 4+ years of field testing and validation
+
+esphome:
+  name: weather-station  # Change this to your desired device name
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+    advanced:
+      ignore_efuse_custom_mac: true
+
+# WiFi Configuration
+wifi:
+  power_save_mode: NONE
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Optional: Use static IP (comment out for DHCP)
+  manual_ip:
+    static_ip: 192.168.1.XXX      # Change to your desired IP
+    gateway: 192.168.1.1           # Change to your gateway
+    subnet: 255.255.255.0
+    dns1: 192.168.1.1
+    dns2: 8.8.8.8
+
+  # Fallback hotspot in case WiFi connection fails
+  ap:
+    ssid: !secret ap_ssid
+    password: !secret ap_password
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# I2C Bus Configuration
+i2c:
+  sda: 21
+  scl: 22
+  scan: true
+  id: bus_a
+
+# Home Assistant API
+api:
+  encryption:
+    key: !secret api_password
+
+# OTA Updates
+ota:
+  platform: esphome
+  password: !secret ota_password
+
+# ============================================
+# SENSORS
+# ============================================
+
+sensor:
+  # DHT22 Temperature & Humidity Sensor
+  # Pin: GPIO23
+  - platform: dht
+    pin: 23
+    model: DHT22
+    temperature:
+      name: "Temperature"
+      unit_of_measurement: "°C"
+    humidity:
+      name: "Humidity"
+      unit_of_measurement: "%"
+    update_interval: 900s  # 15 minutes
+
+  # BMP280 Pressure & Temperature Sensor (I2C)
+  # Address: 0x76
+  - platform: bmp280_i2c
+    temperature:
+      id: temp280
+      name: "Temperature BMP280"
+      oversampling: 16x
+    pressure:
+      name: "Atmospheric Pressure"
+      id: pressure
+    address: 0x76
+    update_interval: 900s  # 15 minutes
+
+  # Calculated Altitude (based on pressure)
+  - platform: template
+    name: "Altitude"
+    lambda: |-
+      const float STANDARD_SEA_LEVEL_PRESSURE = 1013.25; // Adjust to your location's sea level pressure
+      return ((id(temp280).state + 273.15) / 0.0065) *
+        (powf((STANDARD_SEA_LEVEL_PRESSURE / id(pressure).state), 0.190234) - 1);
+    update_interval: 900s
+    icon: 'mdi:signal'
+    unit_of_measurement: 'm'
+
+  # Optional: DS18B20 External Temperature Sensor
+  # Uncomment and update the address with your sensor's unique address
+  #- platform: dallas
+  #  address: 0xXXXXXXXXXXXXXXXX  # Get this from ESPHome logs
+  #  name: "External Temperature"
+  #dallas:
+  #- pin: 5
+
+  # Battery Level Monitor
+  # Pin: GPIO35 (ADC1_CH7)
+  # Voltage divider factor: 7.3037037 (adjust based on your voltage divider)
+  - platform: adc
+    pin: 35
+    name: "Battery Voltage"
+    update_interval: 600s  # 10 minutes
+    attenuation: 12db
+    filters:
+      - multiply: 7.3037037  # Adjust this multiplier for your voltage divider
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+
+  # Wind Speed Sensor (Anemometer)
+  # Pin: GPIO27
+  # Calibration based on sensor specifications
+  - platform: pulse_counter
+    pin:
+      number: GPIO27
+      mode: INPUT_PULLUP
+    unit_of_measurement: 'km/h'
+    name: "Wind Speed"
+    icon: 'mdi:weather-windy'
+    count_mode:
+      rising_edge: DISABLE
+      falling_edge: INCREMENT
+    internal_filter: 13us
+    update_interval: 60s
+    accuracy_decimals: 1
+    filters:
+      # Calibration factors (adjust based on your anemometer)
+      # rotations_per_sec = pulses / 2 / 60
+      # circ_m = 0.09 * 2 * 3.14 = 0.5652
+      # m/s = 1.18 * circ_m * rotations_per_sec
+      - multiply: 0.0111156  # Convert to m/s
+      - multiply: 3.6        # Convert m/s to km/h
+
+  # Soil Moisture Sensor (Capacitive)
+  # Pin: GPIO34 (ADC1_CH6)
+  # Calibrated for DECAGON 10HS sensor (April 2024)
+  - platform: adc
+    pin: 34
+    name: "Soil Moisture"
+    update_interval: 600s  # 10 minutes
+    unit_of_measurement: "%"
+    attenuation: 12db
+    filters:
+      # Calibration values - adjust based on your sensor
+      # Dry soil (in air): 0.40V = 0%
+      # Wet soil (in water): 1.12V = 100%
+      - calibrate_linear:
+          - 0.40 -> 0    # Voltage reading in air (dry)
+          - 1.12 -> 100  # Voltage reading in water (saturated)
+      - lambda: |-
+          if (x < 0) return 0;
+          else if (x > 100) return 100;
+          else return x;
+    accuracy_decimals: 0
+
+    # Alternative calibrations for different sensors (commented out):
+
+    # For SENO193 sensor:
+    # filters:
+    #   - lambda: |-
+    #       if (x > 1.70) {
+    #         return 0;
+    #       } else if (x < 0.80) {
+    #         return 100;
+    #       } else {
+    #         return (1.70 - x) / (1.70 - 0.80) * 100.0;
+    #       }
+
+    # Alternative DECAGON 10HS calibration:
+    # filters:
+    #   - lambda: |-
+    #       if (x < 0.42) {
+    #         return 0;
+    #       } else if (x > 1.17) {
+    #         return 100;
+    #       } else {
+    #         return (x - 0.42) / (1.17 - 0.42) * 100.0;
+    #       }
+
+  # Leaf Wetness Sensor
+  # Pin: GPIO32
+  - platform: adc
+    pin: 32
+    name: "Leaf Wetness"
+    update_interval: 900s  # 15 minutes
+    attenuation: 12db
+    filters:
+      - multiply: 2
+    unit_of_measurement: "V"
+
+  # Rain Gauge (Tipping Bucket)
+  # Pin: GPIO33
+  # Each tip = 0.375mm of rain (adjust based on your rain gauge)
+  - platform: pulse_counter
+    pin:
+      number: GPIO33
+      mode: INPUT_PULLUP
+    unit_of_measurement: 'mm'
+    name: "Rainfall"
+    icon: 'mdi:weather-pouring'
+    count_mode:
+      rising_edge: DISABLE
+      falling_edge: INCREMENT
+    internal_filter: 13us
+    update_interval: 60s
+    filters:
+      - multiply: 0.375  # Adjust based on your rain gauge (typically 0.2794mm or 0.375mm per tip)
+
+# ============================================
+# SWITCHES / RELAYS
+# ============================================
+
+switch:
+  # Irrigation Control - Zone 1
+  - platform: gpio
+    pin: 14
+    name: "Irrigation Zone 1"
+
+  # Irrigation Control - Zone 2
+  - platform: gpio
+    pin: 13
+    name: "Irrigation Zone 2"
+
+  # Optional: Garden Light
+  #- platform: gpio
+  #  pin: 5
+  #  name: "Garden Light"
+
+# ============================================
+# OPTIONAL: MQTT Configuration
+# ============================================
+# Uncomment to enable MQTT publishing
+# Useful for integration with other home automation systems
+
+#mqtt:
+#  topic_prefix: weather_station
+#  discovery: true
+#  discovery_prefix: homeassistant
+#  client_id: !secret mqtt_client_id
+#  broker: !secret mqtt_broker
+#  port: !secret mqtt_port
+#  username: !secret mqtt_user
+#  password: !secret mqtt_password
+#
+#  # Example: Publish specific sensor to MQTT topic
+#  # Add this under the sensor you want to publish:
+#  #   on_value:
+#  #     - mqtt.publish:
+#  #         topic: "weather/temperature"
+#  #         payload: !lambda |-
+#  #           return to_string(id(temp280).state);
