@@ -40,24 +40,28 @@ A reliable, 3D-printed weather station powered by ESP32 and integrated with Home
 | Component | Model/Type | Quantity | Notes |
 |-----------|------------|----------|-------|
 | Microcontroller | ESP32-DevKit | 1 | 
-| Temperature/Humidity | DHT22 | 1 | 
+| Temperature/Humidity | DHT22 (AM2302) | 1 | Digital sensor |
 | Pressure Sensor | BMP280 | 1 | I2C address: 0x76 |
-| Soil Moisture | <!-- TODO: Modelo específico --> | 1 | Capacitive sensor |
-| Anemometer | <!-- TODO: Modelo --> | 1 | 
-| Rain Gauge | <!-- TODO: Modelo --> | 1 | Tipping bucket type |
-| Leaf Wetness | <!-- TODO: Modelo --> | 1 | 
-| Battery | <!-- TODO: Tipo y capacidad --> | 1 | Optional for backup |
-| Relay Module | <!-- TODO: Modelo --> | 1 | For irrigation control |
-
-<!-- TODO: Completar modelos específicos de sensores -->
+| Soil Moisture | Decagon 10HS *or* Sonoff MS01 | 1 | Capacitive sensor, budget alternative available |
+| Anemometer | HOBO S-WSB-M003 | 1 | Can be replaced with 3D printed version |
+| Rain Gauge | 3D Printed | 1 | Tipping bucket type, pulse counter |
+| Leaf Wetness | Meter PHYTOS 31 | 1 | Analog sensor |
+| Battery | 12V 4.5Ah Gel | 1 | For backup power |
+| Solar Panel | 20W | 1 | For continuous operation |
+| Solar Charge Controller | 10A | 1 | Protects battery |
+| Relay Module | 2-Channel | 1 | For irrigation control |
 
 ### Additional Components
 
-- Resistors for voltage divider (battery monitoring)
-- Wiring and connectors
-- Power supply (<!-- TODO: voltaje y amperaje -->)
-- SD card (optional, for logging)
-- <!-- TODO: Agregar otros componentes -->
+- Voltage divider resistors for battery monitoring (see calibration section)
+- Wiring and waterproof connectors
+- **Power Supply:**
+  - Solar Panel: 20W
+  - Battery: 12V 4.5Ah Gel battery
+  - Solar Charge Controller: 10A
+  - Step-down converter (12V to 5V for ESP32)
+- Waterproof enclosure/housing (3D printed)
+- Cable glands for weatherproofing
 
 ### Tools Required
 
@@ -67,7 +71,9 @@ A reliable, 3D-printed weather station powered by ESP32 and integrated with Home
 - Wire strippers
 - <!-- TODO: Otras herramientas -->
 
-**Estimated Total Cost:** $<!-- TODO: costo aproximado --> USD
+**Estimated Total Cost:** 
+- **Full version** (with HOBO anemometer & Decagon soil sensor): ~$150-200 USD
+- **Budget version** (3D printed anemometer & Sonoff MS01): ~$80-120 USD
 
 ## 📡 Sensors
 
@@ -103,24 +109,42 @@ A reliable, 3D-printed weather station powered by ESP32 and integrated with Home
 
 All STL files are available in the [`hardware/3d_models/`](hardware/3d_models/) directory.
 
+**Organization:** Each sensor has its own folder containing:
+- STL files for printing
+- `img/` subfolder with assembly reference images
+
+This structure helps you see how each component should look when assembled and mounted.
+
 ### Parts List
 
-<!-- TODO: Listar cada pieza impresa -->
-- Main housing
+- Main housing/enclosure
 - Sensor mounts
-- Radiation shield (for temperature accuracy)
-- Rain gauge funnel
-- <!-- TODO: Completar lista de piezas -->
+- Radiation shield (Stevenson screen style for temperature accuracy)
+- **Rain gauge** - Complete tipping bucket mechanism
+- **Anemometer** (optional, budget alternative to HOBO sensor)
+  - Cup assembly
+  - Bearing mount
+  - Pulse generator mechanism
+- Mounting brackets
+- Cable management clips
 
 ### Print Settings
 
 - **Layer Height:** 0.2mm
 - **Infill:** 20-30%
-- **Material:** PETG or ASA (outdoor resistant)
-- **Supports:** <!-- TODO: indicar si/no y dónde -->
-- **Notes:** <!-- TODO: consideraciones especiales -->
+- **Material:** PETG or ASA (UV and weather resistant)
+  - **Critical:** Do NOT use PLA - it degrades quickly outdoors
+- **Supports:** Required for overhangs in rain gauge and anemometer parts
+- **Post-processing:** 
+  - Seal layer lines with epoxy or UV-resistant coating
+  - Sand parts that contact moving components (rain gauge, anemometer)
+  
+### Assembly Notes
 
-<!-- TODO: Agregar configuraciones específicas de impresión -->
+- Use stainless steel hardware for outdoor durability
+- Apply thread locker on outdoor fasteners
+- Ensure proper ventilation in temperature sensor housing
+- Test rain gauge calibration after assembly (0.375mm per tip)
 
 ## 📥 Installation
 
@@ -208,42 +232,55 @@ To enable MQTT, uncomment the MQTT section in `weather_station.yaml` and add cre
 
 **Important:** Calibration is sensor-specific and critical for accuracy.
 
-**Current configuration (DECAGON 10HS):**
+#### For Decagon 10HS (Current configuration):
 - Dry (in air): 0.40V = 0%
 - Wet (in water): 1.12V = 100%
 
-**To calibrate your sensor:**
+#### For Sonoff MS01 (Budget alternative):
+Calibration values will differ. To calibrate:
 
-1. Place sensor in air (completely dry):
-```bash
-# Check ESPHome logs for voltage reading
-esphome logs weather_station.yaml
-```
-
-2. Place sensor in water (completely saturated):
-   - Note the voltage reading
-
-3. Update calibration in YAML:
+1. Place sensor in air (completely dry) and note voltage
+2. Place sensor in water (completely saturated) and note voltage
+3. Update in YAML:
 ```yaml
 - calibrate_linear:
     - YOUR_DRY_VOLTAGE -> 0
     - YOUR_WET_VOLTAGE -> 100
 ```
 
-<!-- TODO: Agregar fotos del proceso de calibración -->
+**To check voltage readings:**
+```bash
+esphome logs weather_station.yaml
+```
 
-### Wind Speed
+### Wind Speed (Anemometer)
 
-The anemometer calibration depends on your specific model:
-- Current factor: 0.0111156 × 3.6 (for km/h)
-- Adjust based on manufacturer specifications
+#### HOBO S-WSB-M003 (recommended):
+- Current calibration: 0.0111156 × 3.6 (converts to km/h)
+- Professional-grade sensor with proven accuracy
 
-<!-- TODO: Documentar proceso de calibración del anemómetro -->
+#### 3D Printed Alternative (budget option):
+- Requires calibration against known wind speed or reference anemometer
+- Factor may vary based on cup size and bearing friction
+- Start with same calibration factor and adjust based on testing
 
-### Rain Gauge
+**Calibration process:**
+1. Compare readings with local weather station
+2. Adjust multiplier factor in YAML if needed
 
-- Current: 0.375mm per tip
-- Adjust based on your rain gauge specifications (commonly 0.2794mm or 0.375mm)
+### Rain Gauge (3D Printed)
+
+- **Current calibration:** 0.375mm per tip
+- **Type:** Tipping bucket with pulse counter
+- Design based on standard rain gauge geometry
+
+**To verify calibration:**
+1. Pour a known volume of water (e.g., 10ml)
+2. Count the number of tips
+3. Calculate: mm of rain = volume (ml) / collection area (cm²)
+4. Adjust multiplier in YAML if needed
+
+**Note:** The 3D printed design STL includes the collection funnel with specific diameter for 0.375mm/tip calibration.
 
 ### Battery Monitor
 
@@ -268,23 +305,64 @@ Once ESPHome device is running, it will automatically appear in Home Assistant:
 
 Example Lovelace card configuration:
 
-```yaml
-# TODO: Agregar ejemplo de tarjeta de Lovelace
+```
+type: horizontal-stack
+cards:
+  - type: tile
+    entity: sensor.temperatura
+    vertical: false
+    color: teal
+    features_position: bottom
+    name: Temperatura
+    show_entity_picture: true
+  - type: tile
+    entity: sensor.humedad
+    vertical: false
+    color: orange
+    features_position: bottom
+    name: Humedad
+    show_entity_picture: true
+
 ```
 
 ### Automations
 
 Example automation for irrigation based on soil moisture:
 
-```yaml
-# TODO: Agregar ejemplos de automatizaciones
+```
+   alias: Riego jardín ON
+description: Encendido de riego diario
+triggers:
+  - at: "19:00:00"
+    trigger: time
+  - at: "06:00:00"
+    trigger: time
+conditions:
+  - condition: numeric_state
+    entity_id: sensor.humsuelo_3
+    below: 50
+actions:
+  - action: switch.turn_on
+    metadata: {}
+    data: {}
+    target:
+      entity_id: switch.riego_jardin
+  - data:
+      message: Encendido programado.
+      title: "Sistema de riego:"
+    action: notify.mobile_app_1
+  - data:
+      message: Encendido programado.
+      title: "Sistema de riego:"
+    action: notify.mobile_app_2
+mode: single
+
 ```
 
 ## 📊 Lessons Learned (4+ Years of Operation)
 
 ### What Worked Well
 
-<!-- TODO: Documentar experiencias positivas -->
 - Sensor reliability
 - Weather resistance of enclosure
 - Battery life
@@ -292,7 +370,6 @@ Example automation for irrigation based on soil moisture:
 
 ### Challenges Overcome
 
-<!-- TODO: Documentar problemas resueltos -->
 - Initial calibration issues
 - Weather-related failures
 - Improvements made over time
@@ -300,7 +377,6 @@ Example automation for irrigation based on soil moisture:
 
 ### Recommendations
 
-<!-- TODO: Consejos para quien replique el proyecto -->
 - Use PETG or ASA for outdoor parts
 - Add proper ventilation but protect from rain
 - Regular maintenance schedule
@@ -308,17 +384,28 @@ Example automation for irrigation based on soil moisture:
 
 ### Design Evolution
 
-<!-- TODO: Cómo ha evolucionado el diseño en 4 años -->
 - Version 1.0: Initial design
 - Version 2.0: Improvements based on first year
 - Current version: Refined after 4 years
 - etc.
 
-## 🤝 Contributing
+## ❤️ Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! If you'd like to help, please feel free to submit a pull request or open an issue to discuss a new feature or bug.
 
-<!-- TODO: Agregar guidelines de contribución si deseas -->
+**Ways to contribute:**
+- 🐛 Report bugs or issues you encounter
+- 💡 Suggest new features or improvements
+- 📝 Improve documentation
+- 🔧 Submit fixes or enhancements
+- 📸 Share photos of your build
+- 🧪 Share calibration data for different sensors
+
+**Before contributing:**
+- Check existing issues to avoid duplicates
+- For major changes, open an issue first to discuss
+- Follow the existing code style in YAML files
+- Test your changes with ESPHome before submitting
 
 ## 📝 TODO / Future Improvements
 
@@ -330,7 +417,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-<!-- TODO: Elegir una licencia -->
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 Alternatively, you can choose:
@@ -342,21 +428,28 @@ Alternatively, you can choose:
 
 - ESPHome community
 - Home Assistant community
-- <!-- TODO: Agregar créditos si usaste referencias de otros proyectos -->
-
-## 📧 Contact
-
-<!-- TODO: Agregar información de contacto si deseas -->
-- GitHub: [@YOUR_USERNAME](https://github.com/YOUR_USERNAME)
-- Home Assistant Community: [Link to forum post]
-
+- ESP32 community
 ---
 
 **Note:** This project has been tested and refined over 4+ years of continuous outdoor operation. While the design is proven, always consider your local climate and conditions when replicating.
 
 ## 🖼️ Gallery
 
-<!-- TODO: Agregar más fotos -->
-![Assembly](docs/images/assembly.jpg)
-![Installed](docs/images/installed.jpg)
-![Dashboard](docs/images/dashboard.png)
+General project images are available in [`docs/images/`](docs/images/).
+
+### Overview
+![Assembly](docs/images/station_overview.jpg)
+*Complete weather station installation*
+
+### Installation
+![Installed](docs/images/station_installed.jpg)
+*Mounted and operational*
+
+### Home Assistant Dashboard
+![Dashboard](docs/images/dashboard_main.png)
+*Main weather dashboard*
+
+![Sensors](docs/images/dashboard_sensors.png)
+*Detailed sensor readings*
+
+**Note:** Each sensor folder in `hardware/3d_models/` contains specific assembly images.
